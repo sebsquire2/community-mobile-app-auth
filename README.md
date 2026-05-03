@@ -62,78 +62,38 @@ Production-quality authentication system extracted from a React Native social ap
 
 ### 1. Hybrid JWT + rotating opaque refresh tokens
 
-**The problem:** Pure JWT can't revoke tokens — a logged-out user stays authenticated until expiry. Pure sessions require a DB lookup on every request.
+**Problem:** Pure JWT can't revoke tokens - a logged-out user stays authenticated until expiry. Pure sessions require a DB lookup on every request.
 
-**The solution:** Short-lived JWT access tokens (15 min, stateless) paired with long-lived opaque refresh tokens (7 days, stored as SHA-256 hashes in the DB, revocable immediately).
+**Solution:** Short-lived JWT access tokens (15 min, stateless) paired with long-lived opaque refresh tokens (7 days, stored as SHA-256 hashes in the DB, revocable immediately).
 
 - Access token validation = zero DB cost
 - Logout/revocation = flip `revoked_at` in one row
 - Stolen session = detectable within 7 days (or immediately if the token is used)
 
-```python
-# backend/security/auth.py
-def rotate_refresh_token(db, raw_refresh_token):
-    with db.begin():
-        token_row = db.execute(
-            select(RefreshToken)
-            .where(RefreshToken.token_hash == hash_refresh_token(raw_refresh_token))
-            .with_for_update()          # serialise concurrent refresh calls
-        ).scalar_one_or_none()
-        token_row.revoked_at = now      # single-use: old token is dead immediately
-        new_refresh = generate_refresh_token()
-        _create_refresh_token_row(db, user_id, new_refresh)
-```
-
-### 2. Argon2id over bcrypt
+### 2. Argon2id instead of bcrypt
 
 Argon2id is memory-hard. An attacker who leaks the DB and tries to brute-force offline faces GPU/ASIC resistance because each attempt requires a full memory allocation (default: 64 MiB). bcrypt only provides time-hardness — modern GPUs crack it at ~1 billion hashes/sec.
 
-Parameters are tunable via env vars without code changes:
-
-```
-ARGON2_TIME_COST=3
-ARGON2_MEMORY_COST_KIB=65536   # 64 MiB
-ARGON2_PARALLELISM=2
-```
-
 ### 3. The concurrent refresh problem — and why a mutex fixes it
 
-When an access token expires, 4 parallel in-flight requests all get 401 simultaneously. A naive fix — each request independently calls `/auth/refresh` — breaks immediately: the first call rotates the refresh token, so calls 2-4 present a revoked token and get 401 again. The client looks "logged out" for no reason.
+**Problem:** When an access token expires, 4 parallel in-flight requests all get 401 simultaneously. A naive fix: each request independently calls `/auth/refresh` would break immediately: the first call rotates the refresh token, so calls 2-4 present a revoked token and get 401 again. The client looks "logged out" for no reason.
 
-**Fix has two parts:**
+**Solution has two parts:**
 
-**Server side** — `SELECT FOR UPDATE` row lock ensures only one concurrent refresh call can succeed with a given token. The second caller sees `revoked_at` is already set and gets 401.
+**Server:** `SELECT FOR UPDATE` row lock ensures only one concurrent refresh call can succeed with a given token. The second caller sees `revoked_at` is already set and gets 401.
 
-**Client side** — a promise mutex ensures only one refresh call is in-flight at a time. All other pending requests wait on the same promise:
+**Client:** a promise mutex ensures only one refresh call is in-flight at a time. All other pending requests wait on the same promise:
 
-```typescript
-// frontend/lib/api.ts
-async function getValidAccessToken() {
-  const existing = await loadAccessTokenFromStorage();
-  if (existing) return existing;
-  if (!refreshPromise) {
-    refreshPromise = doRefresh().finally(() => { refreshPromise = null; });
-  }
-  return refreshPromise;   // all callers share this — one network call, not N
-}
-```
-
-This is defense in depth: server-side lock prevents replay attacks from multiple *devices*; client-side mutex prevents the 401 storm from a single device.
+Defense in depth: server-side lock prevents replay attacks from multiple devices, client-side mutex prevents the 401 storm from a single device.
 
 ### 4. Multi-layer rate limiting
 
-An attacker targeting a specific account will rotate IPs to bypass IP-based limits. Two layers:
+**Problem:** An attacker targeting a specific account will rotate IPs to bypass IP-based limits.
 
 - **IP-based (slowapi):** 10/min on `/auth/login`, 5/min on `/auth/register` — blocks untargeted attacks
 - **Per-email (DB-backed):** 10 failures per 15-minute window — applies regardless of source IP
 
-```python
-# backend/security/auth_rate_limit.py
-def check_email_rate_limit(db, email):
-    # Cleans up old entries, counts recent failures, raises 429 if >= threshold
-```
-
-Scaling note: the per-email table works fine for single-server deployments. Multi-container would need Redis. This is intentionally documented, not papered over.
+Scaling note: per-email table works fine for single-server deployments, multi-container would need Redis.
 
 ### 5. OAuth account linking (Google + Apple)
 
@@ -143,13 +103,6 @@ Three-stage merge strategy when an OAuth login arrives:
 2. **Email match** — user created a password account then signed in with OAuth; we link the provider instead of creating a duplicate account
 3. **Create new user** — genuinely new, assign to the default community
 
-```python
-def _find_or_create_oauth_user(db, *, provider, sub, email, display_name):
-    # Stage 1: exact provider+sub match
-    # Stage 2: email match → link provider to existing account
-    # Stage 3: create new user
-```
-
 ### 6. Token storage on mobile
 
 | Token | Storage | Reason |
@@ -158,34 +111,17 @@ def _find_or_create_oauth_user(db, *, provider, sub, email, display_name):
 | Refresh token | `expo-secure-store` (iOS Keychain / Android Keystore) | Hardware-backed encrypted storage |
 | User metadata | `AsyncStorage` | Not sensitive; fast to read on app launch |
 
-On app restart: user metadata loads from AsyncStorage immediately (fast UI), then the access token is obtained by calling `/auth/refresh` in the background. The access token is never persisted to disk.
-
-On web: `expo-secure-store` is unavailable; both tokens fall back to `localStorage`. This is acceptable for demo/web builds.
+On app restart user metadata loads from AsyncStorage immediately (fast UI), then the access token is obtained by calling `/auth/refresh` in the background. The access token is never persisted to disk.
 
 ### 7. Fail-fast environment validation
 
 The system refuses to start if misconfigured:
 
-```python
-# Startup fails hard if:
-# - ENV is not set or not a recognised value
-# - ENV=staging/production and JWT_SECRET is unset
-# - ENV=production and ADMIN_SESSION_SECRET is still the dev default
-# - ENV=staging/production and ADMIN_API_KEY is unset
-```
-
 No silent insecure defaults in production. A missing secret causes startup failure, not a degraded state.
 
 ### 8. Viewer permissions — data withheld server-side
 
-Privacy settings (`hide_community_from_non_friends`) are enforced in the serializer, not the UI. Sensitive fields are nulled out before the response leaves the server. The client is told the viewer's relationship (`self`, `friend`, `follower`, `stranger`) so it can render correctly, but it never receives data it isn't entitled to.
-
-```python
-def _serialize_user(user, viewer, db):
-    relationship = _viewer_relationship(viewer, user, db)
-    can_see_community = relationship in ("self", "friend") or not user.hide_community_from_non_friends
-    return ApiUser(community_id=user.community_id if can_see_community else None, ...)
-```
+Privacy settings (`hide_community_from_non_friends`) are enforced in the serializer, not the UI. Sensitive fields are nulled out server side. The client is told the viewer's relationship (`self`, `friend`, `follower`, `stranger`) so it can render correctly but never receives data it isn't entitled to.
 
 ---
 
