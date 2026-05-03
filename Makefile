@@ -10,10 +10,12 @@ dev:
 	$(MAKE) -j2 dev-backend dev-frontend
 
 migrate:
-	.venv/bin/alembic -c backend/alembic.ini upgrade head
+	docker compose exec backend alembic -c backend/alembic.ini upgrade head
 
 test:
-	ENV=test .venv/bin/pytest backend/tests/ -v
+	docker compose exec db psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='communityapp_test'" | grep -q 1 || \
+		docker compose exec db psql -U postgres -c "CREATE DATABASE communityapp_test"
+	docker compose exec -e ENV=test -e DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/communityapp_test backend pytest backend/tests/ -v
 
 docker-up:
 	docker compose up

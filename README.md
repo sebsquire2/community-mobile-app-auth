@@ -1,19 +1,47 @@
 # community-mobile-app-auth
 
-what is the problem
-what this is 
-use cases
-how to run
-specific design decisions and why
-limitations
+## Problem
+
+Implementing authentication and tiered authorisation to content (where the same content is visible or hidden depending on a user's group membership) without sacrificing session smoothness or introducing security shortcuts.
+
+## What this is 
+
+A mobile app with full working authentication and authorisation for users in different small communities sharing the same base community (city in this case) use case - the same piece of content is visible or invisible depending on who's asking
+Showcases:
+ - Users can browse the city feed and see public posts from all groups, or their community feed to see just posts from their community.
+ - A user's community membership can be hidden from strangers.
+ - Users can switch communities, switching their posting and viewing context at the same time.
+
+## Run
+
+````bash
+make docker-up    # run backend + db
+make dev-frontend
+# App at http://localhost:8081 · API at http://localhost:8000 · Swagger at http://localhost:8000/docs 
+make migrate      # apply DB migrations
+make test         # run tests
+````
+
+## Demo users
+
+Password: `password123`.
+
+| Email | Username |
+|---|---|
+| alice@example.com | alice |
+| bob@example.com | bob |
+| carol@example.com | carol |
+| dave@example.com | dave |
+| eve@example.com | eve |
+| frank@example.com | frank |
+
+---
+
+## Architecture
 
 Production-quality authentication system extracted from a React Native social app. Full stack: FastAPI backend + Expo (React Native) frontend.
 
 **Stack:** Python 3.12 · FastAPI · SQLAlchemy · PostgreSQL · Alembic · PyJWT · Argon2id · slowapi · React Native · Expo · TypeScript
-
----
-
-## What's here
 
 | Area | Files | What it does |
 |---|---|---|
@@ -30,57 +58,7 @@ Production-quality authentication system extracted from a React Native social ap
 
 ---
 
-## Quick start
-
-```bash
-# Backend
-cp .env.example .env
-docker-compose up -d db
-uv pip install -e .
-alembic -c backend/alembic.ini upgrade head
-uvicorn backend.main:app --reload
-
-# Frontend (separate terminal)
-cd frontend
-npm install
-npx expo start
-```
-
-Or run everything with Docker:
-
-```bash
-docker-compose up
-```
-
-API available at `http://localhost:8000`. Swagger UI at `http://localhost:8000/docs`.
-
----
-
-## Demo users
-
-All demo users share the password `password123`.
-
-| Email | Username |
-|---|---|
-| alice@example.com | alice |
-| bob@example.com | bob |
-| carol@example.com | carol |
-| dave@example.com | dave |
-| eve@example.com | eve |
-| frank@example.com | frank |
-
----
-
-## Running tests
-
-```bash
-createdb communityapp_test   # one-time setup
-ENV=test pytest backend/tests/ -v
-```
-
----
-
-## Design decisions
+## Design decisions and why
 
 ### 1. Hybrid JWT + rotating opaque refresh tokens
 
