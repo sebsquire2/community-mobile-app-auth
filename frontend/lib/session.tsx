@@ -18,7 +18,7 @@ type SessionState = {
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: (idToken: string) => Promise<void>;
   loginWithApple: (idToken: string, displayName?: string) => Promise<void>;
-  register: (displayName: string, email: string, password: string) => Promise<void>;
+  register: (displayName: string, email: string, password: string, communityId: string) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (nextUser: ApiUser) => Promise<void>;
 };
@@ -77,8 +77,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   );
 
   const register = useCallback(
-    async (displayName: string, email: string, password: string) => {
-      const { user: nextUser, access_token, refresh_token, token_type } = await apiRegister({ displayName, email, password });
+    async (displayName: string, email: string, password: string, communityId: string) => {
+      const { user: nextUser, access_token, refresh_token, token_type } = await apiRegister({ displayName, email, password, communityId });
       await persistSession(nextUser, { accessToken: access_token, refreshToken: refresh_token, tokenType: token_type });
     },
     [persistSession]

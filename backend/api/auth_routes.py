@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 from uuid import uuid4
 
 import jwt
@@ -14,6 +14,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.security.auth import (
+    bearer_scheme,
+    decode_access_token,
     get_current_user,
     hash_password,
     issue_tokens_for_user,
@@ -31,6 +33,7 @@ from backend.models import Community, Follow, Friendship, RefreshToken, User
 from backend.core.rate_limit import limiter
 
 from backend.api.schemas import (
+    ApiCommunity,
     ApiUser,
     AppleOAuthRequest,
     GoogleOAuthRequest,
@@ -39,6 +42,7 @@ from backend.api.schemas import (
     RefreshRequest,
     RegisterRequest,
     RevokeSessionsRequest,
+    UpdateMeRequest,
 )
 
 GOOGLE_JWKS_URI = "https://www.googleapis.com/oauth2/v3/certs"
@@ -282,7 +286,12 @@ def register(
         raise HTTPException(status_code=400, detail="Display name required")
     if db.execute(select(User).where(User.email == email)).scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Email already registered")
-    default_community = db.execute(select(Community).limit(1)).scalar_one_or_none()
+    if payload.communityId is not None:
+        community = db.get(Community, payload.communityId)
+        if not community:
+            raise HTTPException(status_code=404, detail="Community not found")
+    else:
+        community = db.execute(select(Community).limit(1)).scalar_one_or_none()
     base_username = email.split("@")[0][:20].lower()
     username = base_username
     counter = 1
@@ -295,7 +304,7 @@ def register(
         email=email,
         password_hash=hash_password(payload.password),
         display_name=payload.displayName.strip(),
-        community_id=default_community.id if default_community else None,
+        community_id=community.id if community else None,
     )
     db.add(user)
     db.commit()
@@ -357,3 +366,77 @@ def get_me(
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     return _serialize_user(current_user, current_user, db)
+
+
+def _get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> Optional[User]:
+    if not credentials or credentials.scheme.lower() != "bearer":
+        return None
+    try:
+        user_id = decode_access_token(credentials.credentials)
+    except Exception:
+        return None
+    return db.get(User, user_id)
+
+
+@router.patch("/users/me")
+def update_me(
+    payload: UpdateMeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    if payload.community_id is not None:
+        if not db.get(Community, payload.community_id):
+            raise HTTPException(status_code=404, detail="Community not found")
+        current_user.community_id = payload.community_id
+    if payload.display_name is not None:
+        if not payload.display_name.strip():
+            raise HTTPException(status_code=400, detail="Display name cannot be empty")
+        current_user.display_name = payload.display_name.strip()
+    if payload.hide_community_from_non_friends is not None:
+        current_user.hide_community_from_non_friends = payload.hide_community_from_non_friends
+    db.commit()
+    db.refresh(current_user)
+    return _serialize_user(current_user, current_user, db)
+
+
+@router.get("/communities")
+def list_communities(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
+    rows = db.execute(
+        select(Community, func.count(User.id).label("member_count"))
+        .outerjoin(User, User.community_id == Community.id)
+        .group_by(Community.id)
+        .order_by(Community.name)
+    ).all()
+    return [
+        ApiCommunity(id=r.Community.id, name=r.Community.name, member_count=r.member_count).model_dump(by_alias=True)
+        for r in rows
+    ]
+
+
+@router.get("/communities/{community_id}/members")
+def list_community_members(
+    community_id: str,
+    viewer: Optional[User] = Depends(_get_optional_user),
+    db: Session = Depends(get_db),
+) -> List[Dict[str, Any]]:
+    if not db.get(Community, community_id):
+        raise HTTPException(status_code=404, detail="Community not found")
+    members = db.execute(
+        select(User).where(User.community_id == community_id).order_by(User.display_name)
+    ).scalars().all()
+    return [_serialize_user(m, viewer, db) for m in members]
+
+
+@router.get("/users/{user_id}")
+def get_user(
+    user_id: str,
+    viewer: Optional[User] = Depends(_get_optional_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return _serialize_user(user, viewer, db)

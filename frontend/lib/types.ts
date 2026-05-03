@@ -1,3 +1,9 @@
+export type ApiCommunity = {
+  id: string;
+  name: string;
+  memberCount: number;
+};
+
 export type ApiUser = {
   id: string;
   username: string;

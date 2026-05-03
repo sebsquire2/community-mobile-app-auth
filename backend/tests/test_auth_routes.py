@@ -5,7 +5,7 @@ import concurrent.futures
 import pytest
 
 from backend.security.auth import hash_password, issue_tokens_for_user
-from backend.models import User
+from backend.models import Community, User
 
 
 def _make_user(db, *, email="user@example.com", password="password123", community_id=None) -> User:
@@ -172,3 +172,146 @@ class TestGetMe:
     def test_get_me_unauthenticated(self, client):
         r = client.get("/users/me")
         assert r.status_code == 401
+
+
+def _make_community(db, *, id: str, name: str) -> Community:
+    c = Community(id=id, name=name)
+    db.add(c)
+    db.commit()
+    return c
+
+
+class TestListCommunities:
+    def test_returns_all_communities_with_member_counts(self, client, db):
+        alpha = _make_community(db, id="c-alpha", name="Alpha")
+        beta = _make_community(db, id="c-beta", name="Beta")
+        _make_user(db, email="u1@x.com", community_id=alpha.id)
+        _make_user(db, email="u2@x.com", community_id=alpha.id)
+        _make_user(db, email="u3@x.com", community_id=beta.id)
+
+        r = client.get("/communities")
+        assert r.status_code == 200
+        by_id = {c["id"]: c for c in r.json()}
+        assert by_id["c-alpha"]["memberCount"] == 2
+        assert by_id["c-beta"]["memberCount"] == 1
+
+    def test_community_with_no_members_shows_zero(self, client, db):
+        _make_community(db, id="c-empty", name="Empty")
+        r = client.get("/communities")
+        assert r.status_code == 200
+        by_id = {c["id"]: c for c in r.json()}
+        assert by_id["c-empty"]["memberCount"] == 0
+
+
+class TestUpdateMe:
+    def test_switch_community(self, client, db):
+        alpha = _make_community(db, id="c-alpha", name="Alpha")
+        beta = _make_community(db, id="c-beta", name="Beta")
+        user = _make_user(db, community_id=alpha.id)
+        tokens = issue_tokens_for_user(db, user)
+
+        r = client.patch(
+            "/users/me",
+            json={"communityId": beta.id},
+            headers={"Authorization": f"Bearer {tokens.access_token}"},
+        )
+        assert r.status_code == 200
+        assert r.json()["communityId"] == beta.id
+
+    def test_community_counts_update_after_switch(self, client, db):
+        alpha = _make_community(db, id="c-alpha", name="Alpha")
+        beta = _make_community(db, id="c-beta", name="Beta")
+        user = _make_user(db, community_id=alpha.id)
+        tokens = issue_tokens_for_user(db, user)
+
+        client.patch(
+            "/users/me",
+            json={"communityId": beta.id},
+            headers={"Authorization": f"Bearer {tokens.access_token}"},
+        )
+
+        r = client.get("/communities")
+        by_id = {c["id"]: c for c in r.json()}
+        assert by_id["c-alpha"]["memberCount"] == 0
+        assert by_id["c-beta"]["memberCount"] == 1
+
+    def test_switch_to_unknown_community_returns_404(self, client, db):
+        user = _make_user(db)
+        tokens = issue_tokens_for_user(db, user)
+        r = client.patch(
+            "/users/me",
+            json={"communityId": "no-such-community"},
+            headers={"Authorization": f"Bearer {tokens.access_token}"},
+        )
+        assert r.status_code == 404
+
+    def test_update_display_name(self, client, db):
+        user = _make_user(db)
+        tokens = issue_tokens_for_user(db, user)
+        r = client.patch(
+            "/users/me",
+            json={"displayName": "New Name"},
+            headers={"Authorization": f"Bearer {tokens.access_token}"},
+        )
+        assert r.status_code == 200
+        assert r.json()["displayName"] == "New Name"
+
+    def test_unauthenticated_patch_rejected(self, client):
+        r = client.patch("/users/me", json={"displayName": "Hacker"})
+        assert r.status_code == 401
+
+
+class TestGetUser:
+    def test_public_community_visible_to_stranger(self, client, db):
+        alpha = _make_community(db, id="c-alpha", name="Alpha")
+        target = _make_user(db, email="target@x.com", community_id=alpha.id)
+        # target has hide_community_from_non_friends=False (default)
+
+        viewer = _make_user(db, email="viewer@x.com")
+        tokens = issue_tokens_for_user(db, viewer)
+
+        r = client.get(
+            f"/users/{target.id}",
+            headers={"Authorization": f"Bearer {tokens.access_token}"},
+        )
+        assert r.status_code == 200
+        assert r.json()["communityId"] == alpha.id
+        assert r.json()["viewerRelationship"] == "stranger"
+
+    def test_hidden_community_not_visible_to_stranger(self, client, db):
+        alpha = _make_community(db, id="c-alpha", name="Alpha")
+        target = _make_user(db, email="target@x.com", community_id=alpha.id)
+        target.hide_community_from_non_friends = True
+        db.commit()
+
+        viewer = _make_user(db, email="viewer@x.com")
+        tokens = issue_tokens_for_user(db, viewer)
+
+        r = client.get(
+            f"/users/{target.id}",
+            headers={"Authorization": f"Bearer {tokens.access_token}"},
+        )
+        assert r.status_code == 200
+        assert r.json()["communityId"] is None
+
+    def test_unauthenticated_viewer_sees_public_community(self, client, db):
+        alpha = _make_community(db, id="c-alpha", name="Alpha")
+        target = _make_user(db, email="target@x.com", community_id=alpha.id)
+
+        r = client.get(f"/users/{target.id}")
+        assert r.status_code == 200
+        assert r.json()["communityId"] == alpha.id
+
+    def test_unauthenticated_viewer_cannot_see_hidden_community(self, client, db):
+        alpha = _make_community(db, id="c-alpha", name="Alpha")
+        target = _make_user(db, email="target@x.com", community_id=alpha.id)
+        target.hide_community_from_non_friends = True
+        db.commit()
+
+        r = client.get(f"/users/{target.id}")
+        assert r.status_code == 200
+        assert r.json()["communityId"] is None
+
+    def test_unknown_user_returns_404(self, client):
+        r = client.get("/users/user-does-not-exist")
+        assert r.status_code == 404

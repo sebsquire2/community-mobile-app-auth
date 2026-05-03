@@ -1,4 +1,4 @@
-import { ApiUser } from './types';
+import { ApiCommunity, ApiUser } from './types';
 import { invalidateSession } from './sessionInvalidation';
 import {
   loadPersistedSession,
@@ -197,6 +197,7 @@ export async function register(payload: {
   email: string;
   password: string;
   displayName: string;
+  communityId: string;
 }): Promise<AuthResponse> {
   const response = await fetchJson<AuthResponse>('/auth/register', {
     method: 'POST',
@@ -208,6 +209,21 @@ export async function register(payload: {
 
 export async function fetchMe(): Promise<ApiUser> {
   return fetchJson<ApiUser>('/users/me');
+}
+
+export async function fetchCommunities(): Promise<ApiCommunity[]> {
+  return fetchJson<ApiCommunity[]>('/communities');
+}
+
+export async function fetchCommunityMembers(communityId: string): Promise<ApiUser[]> {
+  return fetchJson<ApiUser[]>(`/communities/${encodeURIComponent(communityId)}/members`);
+}
+
+export async function updateMe(payload: { communityId?: string; displayName?: string }): Promise<ApiUser> {
+  return fetchJson<ApiUser>('/users/me', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function logoutSession(): Promise<void> {

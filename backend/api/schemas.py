@@ -48,6 +48,7 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     displayName: str
+    communityId: Optional[str] = None
 
 
 class GoogleOAuthRequest(BaseModel):
@@ -57,3 +58,15 @@ class GoogleOAuthRequest(BaseModel):
 class AppleOAuthRequest(BaseModel):
     id_token: str
     display_name: Optional[str] = None
+
+
+class ApiCommunity(ApiModel):
+    id: str
+    name: str
+    member_count: int
+
+
+class UpdateMeRequest(ApiModel):
+    community_id: Optional[str] = None
+    display_name: Optional[str] = None
+    hide_community_from_non_friends: Optional[bool] = None

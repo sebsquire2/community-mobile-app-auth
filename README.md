@@ -56,6 +56,21 @@ API available at `http://localhost:8000`. Swagger UI at `http://localhost:8000/d
 
 ---
 
+## Demo users
+
+All demo users share the password `password123`.
+
+| Email | Username |
+|---|---|
+| alice@example.com | alice |
+| bob@example.com | bob |
+| carol@example.com | carol |
+| dave@example.com | dave |
+| eve@example.com | eve |
+| frank@example.com | frank |
+
+---
+
 ## Running tests
 
 ```bash
