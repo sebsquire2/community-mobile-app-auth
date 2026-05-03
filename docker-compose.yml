@@ -2,7 +2,7 @@ services:
   db:
     image: postgres:16
     environment:
-      POSTGRES_DB: auth_showcase
+      POSTGRES_DB: communityapp
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
@@ -21,7 +21,7 @@ services:
       - "8000:8000"
     environment:
       ENV: development
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/auth_showcase
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/communityapp
       CORS_ALLOW_ORIGINS: "http://localhost:8081,http://localhost:3000"
     depends_on:
       db:

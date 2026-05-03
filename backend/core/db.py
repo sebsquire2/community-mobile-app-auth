@@ -7,7 +7,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+psycopg://postgres:postgres@localhost:5432/auth_showcase",
+    "postgresql+psycopg://postgres:postgres@localhost:5432/communityapp",
 )
 
 engine = create_engine(DATABASE_URL, future=True)

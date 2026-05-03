@@ -1,5 +1,12 @@
 # community-mobile-app-auth
 
+what is the problem
+what this is 
+use cases
+how to run
+specific design decisions and why
+limitations
+
 Production-quality authentication system extracted from a React Native social app. Full stack: FastAPI backend + Expo (React Native) frontend.
 
 **Stack:** Python 3.12 · FastAPI · SQLAlchemy · PostgreSQL · Alembic · PyJWT · Argon2id · slowapi · React Native · Expo · TypeScript
@@ -52,7 +59,7 @@ API available at `http://localhost:8000`. Swagger UI at `http://localhost:8000/d
 ## Running tests
 
 ```bash
-createdb auth_showcase_test   # one-time setup
+createdb communityapp_test   # one-time setup
 ENV=test pytest backend/tests/ -v
 ```
 

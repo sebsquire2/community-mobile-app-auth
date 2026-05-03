@@ -133,9 +133,6 @@ class TestConcurrentRefresh:
         """
         from fastapi.testclient import TestClient
         from backend.main import app
-        from backend.core.dependencies import get_db
-        from backend.security.auth import get_auth_db
-        from backend.core.db import SessionLocal
 
         user = _make_user(db)
         tokens = issue_tokens_for_user(db, user)
@@ -144,22 +141,9 @@ class TestConcurrentRefresh:
         results = []
 
         def do_refresh():
-            session = SessionLocal()
-            try:
-                def override():
-                    try:
-                        yield session
-                    finally:
-                        pass
-
-                app.dependency_overrides[get_db] = override
-                app.dependency_overrides[get_auth_db] = override
-                with TestClient(app) as c:
-                    r = c.post("/auth/refresh", json={"refresh_token": tokens.refresh_token})
-                    results.append(r.status_code)
-            finally:
-                session.close()
-                app.dependency_overrides.clear()
+            with TestClient(app) as c:
+                r = c.post("/auth/refresh", json={"refresh_token": tokens.refresh_token})
+                results.append(r.status_code)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             futures = [executor.submit(do_refresh), executor.submit(do_refresh)]

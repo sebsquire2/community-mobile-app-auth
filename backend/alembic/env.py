@@ -26,7 +26,7 @@ target_metadata = Base.metadata
 def get_url() -> str:
     return os.getenv(
         "DATABASE_URL",
-        "postgresql+psycopg://postgres:postgres@localhost:5432/auth_showcase",
+        "postgresql+psycopg://postgres:postgres@localhost:5432/communityapp",
     )
 
 

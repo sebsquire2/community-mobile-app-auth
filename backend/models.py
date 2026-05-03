@@ -2,10 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
 from .core.db import Base
+
+
+class FailedLoginAttempt(Base):
+    __tablename__ = "auth_failed_login_attempts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(String, nullable=False, index=True)
+    failed_at = Column(DateTime(timezone=True), nullable=False)
 
 
 class Community(Base):

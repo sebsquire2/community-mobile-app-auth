@@ -98,6 +98,7 @@ def create_access_token(user_id: str) -> str:
     payload = {
         "sub": user_id,
         "type": "access",
+        "jti": secrets.token_hex(16),
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=access_token_expire_minutes())).timestamp()),
     }
@@ -157,39 +158,36 @@ def rotate_refresh_token(db: Session, raw_refresh_token: str) -> tuple[AuthToken
     token_hash = hash_refresh_token(raw_refresh_token)
     now = _utcnow()
 
-    user_id: Optional[str] = None
-    new_refresh: Optional[str] = None
-    with db.begin():
-        token_row = db.execute(
-            select(RefreshToken).where(RefreshToken.token_hash == token_hash).with_for_update()
-        ).scalar_one_or_none()
-        if not token_row:
-            raise HTTPException(status_code=401, detail="Invalid refresh token")
-        if token_row.revoked_at is not None:
-            raise HTTPException(status_code=401, detail="Refresh token already used")
-        if token_row.expires_at <= now:
-            raise HTTPException(status_code=401, detail="Refresh token expired")
+    token_row = db.execute(
+        select(RefreshToken).where(RefreshToken.token_hash == token_hash).with_for_update()
+    ).scalar_one_or_none()
+    if not token_row:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    if token_row.revoked_at is not None:
+        raise HTTPException(status_code=401, detail="Refresh token already used")
+    if token_row.expires_at <= now:
+        raise HTTPException(status_code=401, detail="Refresh token expired")
 
-        token_row.revoked_at = now
-        user_id = token_row.user_id
-        new_refresh = generate_refresh_token()
-        _create_refresh_token_row(db, user_id, new_refresh)
+    token_row.revoked_at = now
+    user_id = token_row.user_id
+    new_refresh = generate_refresh_token()
+    _create_refresh_token_row(db, user_id, new_refresh)
+    db.commit()
 
-    assert user_id is not None and new_refresh is not None
     tokens = AuthTokens(access_token=create_access_token(user_id), refresh_token=new_refresh)
     return tokens, user_id
 
 
 def revoke_refresh_token(db: Session, user_id: str, raw_refresh_token: str) -> None:
     token_hash = hash_refresh_token(raw_refresh_token)
-    with db.begin():
-        token_row = db.execute(
-            select(RefreshToken)
-            .where(RefreshToken.token_hash == token_hash, RefreshToken.user_id == user_id)
-            .with_for_update()
-        ).scalar_one_or_none()
-        if token_row and token_row.revoked_at is None:
-            token_row.revoked_at = _utcnow()
+    token_row = db.execute(
+        select(RefreshToken)
+        .where(RefreshToken.token_hash == token_hash, RefreshToken.user_id == user_id)
+        .with_for_update()
+    ).scalar_one_or_none()
+    if token_row and token_row.revoked_at is None:
+        token_row.revoked_at = _utcnow()
+    db.commit()
 
 
 def get_auth_db():

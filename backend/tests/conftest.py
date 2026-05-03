@@ -5,7 +5,7 @@ import os
 os.environ.setdefault("ENV", "test")
 os.environ.setdefault(
     "DATABASE_URL",
-    "postgresql+psycopg://postgres:postgres@localhost:5432/auth_showcase_test",
+    "postgresql+psycopg://postgres:postgres@localhost:5432/communityapp_test",
 )
 
 import pytest
