@@ -62,12 +62,12 @@ Production-quality authentication system extracted from a React Native social ap
 
 ### 1. Hybrid JWT + rotating opaque refresh tokens
 
-**Problem:** Pure JWT can't revoke tokens - a logged-out user stays authenticated until expiry. Pure sessions require a DB lookup on every request.
+**Problem:** Pure JWT can't revoke tokens without extra server-side state. Pure sessions require a DB lookup on every request.
 
-**Solution:** Short-lived JWT access tokens (15 min, stateless) paired with long-lived opaque refresh tokens (7 days, stored as SHA-256 hashes in the DB, revocable immediately).
+**Solution:** Short-lived JWT access tokens (15 min) paired with long-lived opaque refresh tokens (7 days, stored as SHA-256 hashes in the DB, revocable immediately). Access tokens carry a `token_version` that is checked against the user row so logout/revocation can invalidate them immediately.
 
-- Access token validation = zero DB cost
-- Logout/revocation = flip `revoked_at` in one row
+- Access token validation = verify JWT, then compare `token_version` to the user row
+- Logout/revocation = revoke the refresh token and increment `token_version`
 - Stolen session = detectable within 7 days (or immediately if the token is used)
 
 ### 2. Argon2id instead of bcrypt
@@ -127,6 +127,5 @@ Privacy settings (`hide_community_from_non_friends`) are enforced in the seriali
 
 These are documented intentionally — they represent recognised trade-offs, not oversights:
 
-1. **15-minute window after logout** — the access token remains valid until expiry after `/auth/logout`. The refresh token is revoked immediately; a stolen access token has at most 15 minutes of validity.
-2**No email verification on registration**: `validate_email()` checks format only, we should check deliverability.
-3**No input length limits**: no max length on display name, email, etc. 
+1. **No email verification on registration**: `validate_email()` checks format only, we should check deliverability.
+2. **No input length limits**: no max length on display name, email, etc.

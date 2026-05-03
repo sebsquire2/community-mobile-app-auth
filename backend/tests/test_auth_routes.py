@@ -123,6 +123,35 @@ class TestRefreshAndLogout:
         r2 = client.post("/auth/refresh", json={"refresh_token": tokens.refresh_token})
         assert r2.status_code == 401
 
+    def test_logout_invalidates_access_token_immediately(self, client, db):
+        user = _make_user(db)
+        tokens = issue_tokens_for_user(db, user)
+
+        r = client.post(
+            "/auth/logout",
+            json={"refresh_token": tokens.refresh_token},
+            headers={"Authorization": f"Bearer {tokens.access_token}"},
+        )
+        assert r.status_code == 200
+
+        r2 = client.get("/users/me", headers={"Authorization": f"Bearer {tokens.access_token}"})
+        assert r2.status_code == 401
+
+    def test_revoke_sessions_invalidates_existing_access_token(self, client, db, monkeypatch):
+        monkeypatch.setattr("backend.core.dependencies.ADMIN_API_KEY", "test-admin-key")
+        user = _make_user(db)
+        tokens = issue_tokens_for_user(db, user)
+
+        r = client.post(
+            "/auth/revoke-sessions",
+            json={"user_id": user.id},
+            headers={"X-Admin-Key": "test-admin-key"},
+        )
+        assert r.status_code == 200
+
+        r2 = client.get("/users/me", headers={"Authorization": f"Bearer {tokens.access_token}"})
+        assert r2.status_code == 401
+
 
 class TestConcurrentRefresh:
     def test_only_one_concurrent_refresh_succeeds(self, db):

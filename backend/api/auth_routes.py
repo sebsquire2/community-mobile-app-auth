@@ -244,6 +244,8 @@ def logout(
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     revoke_refresh_token(db, current_user.id, payload.refresh_token)
+    current_user.token_version += 1
+    db.commit()
     return {"success": True}
 
 
@@ -262,10 +264,14 @@ def revoke_all_sessions(
     ).scalars().all()
     for token in tokens:
         token.revoked_at = now
-    db.commit()
     user = db.get(User, payload.user_id)
-    if user and user.email:
-        clear_login_attempts(db, user.email)
+    if user:
+        user.token_version += 1
+        db.commit()
+        if user.email:
+            clear_login_attempts(db, user.email)
+    else:
+        db.commit()
     return {"user_id": payload.user_id, "revoked": len(tokens)}
 
 
@@ -376,10 +382,13 @@ def _get_optional_user(
     if not credentials or credentials.scheme.lower() != "bearer":
         return None
     try:
-        user_id = decode_access_token(credentials.credentials)
+        claims = decode_access_token(credentials.credentials)
     except Exception:
         return None
-    return db.get(User, user_id)
+    user = db.get(User, claims.user_id)
+    if not user or user.token_version != claims.token_version:
+        return None
+    return user
 
 
 @router.patch("/users/me")

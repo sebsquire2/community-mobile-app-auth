@@ -53,6 +53,7 @@ class User(Base):
     email = Column(String, nullable=True, unique=True)
     password_hash = Column(String, nullable=True)
     display_name = Column(String, nullable=False)
+    token_version = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     community_id = Column(String, ForeignKey("communities.id"), nullable=True)
     avatar = Column(String, nullable=False, default="")

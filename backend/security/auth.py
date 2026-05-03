@@ -55,6 +55,12 @@ class AuthTokens:
     token_type: str = "bearer"
 
 
+@dataclass
+class AccessTokenClaims:
+    user_id: str
+    token_version: int
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -93,11 +99,12 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(user_id: str) -> str:
+def create_access_token(user_id: str, token_version: int = 0) -> str:
     now = _utcnow()
     payload = {
         "sub": user_id,
         "type": "access",
+        "token_version": token_version,
         "jti": secrets.token_hex(16),
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=access_token_expire_minutes())).timestamp()),
@@ -105,7 +112,7 @@ def create_access_token(user_id: str) -> str:
     return jwt.encode(payload, jwt_secret(), algorithm=jwt_algorithm())
 
 
-def decode_access_token(token: str) -> str:
+def decode_access_token(token: str) -> AccessTokenClaims:
     try:
         payload = jwt.decode(token, jwt_secret(), algorithms=[jwt_algorithm()])
     except InvalidTokenError as exc:
@@ -115,7 +122,10 @@ def decode_access_token(token: str) -> str:
     subject = payload.get("sub")
     if not isinstance(subject, str) or not subject:
         raise HTTPException(status_code=401, detail="Invalid access token")
-    return subject
+    token_version = payload.get("token_version", 0)
+    if not isinstance(token_version, int) or token_version < 0:
+        raise HTTPException(status_code=401, detail="Invalid access token")
+    return AccessTokenClaims(user_id=subject, token_version=token_version)
 
 
 def generate_refresh_token() -> str:
@@ -144,7 +154,10 @@ def issue_tokens_for_user(db: Session, user: User) -> AuthTokens:
     raw_refresh_token = generate_refresh_token()
     _create_refresh_token_row(db, user.id, raw_refresh_token)
     db.commit()
-    return AuthTokens(access_token=create_access_token(user.id), refresh_token=raw_refresh_token)
+    return AuthTokens(
+        access_token=create_access_token(user.id, user.token_version),
+        refresh_token=raw_refresh_token,
+    )
 
 
 def rotate_refresh_token(db: Session, raw_refresh_token: str) -> tuple[AuthTokens, str]:
@@ -170,11 +183,17 @@ def rotate_refresh_token(db: Session, raw_refresh_token: str) -> tuple[AuthToken
 
     token_row.revoked_at = now
     user_id = token_row.user_id
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
     new_refresh = generate_refresh_token()
     _create_refresh_token_row(db, user_id, new_refresh)
     db.commit()
 
-    tokens = AuthTokens(access_token=create_access_token(user_id), refresh_token=new_refresh)
+    tokens = AuthTokens(
+        access_token=create_access_token(user_id, user.token_version),
+        refresh_token=new_refresh,
+    )
     return tokens, user_id
 
 
@@ -204,8 +223,10 @@ def get_current_user(
 ) -> User:
     if not credentials or credentials.scheme.lower() != "bearer":
         raise HTTPException(status_code=401, detail="Not authenticated")
-    user_id = decode_access_token(credentials.credentials)
-    user = db.get(User, user_id)
+    claims = decode_access_token(credentials.credentials)
+    user = db.get(User, claims.user_id)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    if user.token_version != claims.token_version:
+        raise HTTPException(status_code=401, detail="Access token revoked")
     return user

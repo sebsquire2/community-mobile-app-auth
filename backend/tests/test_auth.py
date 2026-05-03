@@ -53,7 +53,9 @@ class TestPasswordHashing:
 class TestJWT:
     def test_valid_token_roundtrips(self):
         token = create_access_token("user-abc123")
-        assert decode_access_token(token) == "user-abc123"
+        claims = decode_access_token(token)
+        assert claims.user_id == "user-abc123"
+        assert claims.token_version == 0
 
     def test_tampered_token_rejected(self):
         from fastapi import HTTPException
