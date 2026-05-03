@@ -17,18 +17,16 @@ Showcases:
 <table>
   <tr>
     <td align="center">
-      <img src="docs/screenshots/Screenshot%20from%202026-05-03%2017-56-07.png" alt="Login flow screenshot 1" width="260" />
+      <img src="docs/screenshots/Screenshot%20from%202026-05-03%2017-56-07.png" alt="Login flow screenshot 1" width="180" />
     </td>
     <td align="center">
-      <img src="docs/screenshots/Screenshot%20from%202026-05-03%2017-56-27.png" alt="Login flow screenshot 2" width="260" />
-    </td>
-  </tr>
-  <tr>
-    <td align="center">
-      <img src="docs/screenshots/Screenshot%20from%202026-05-03%2017-57-07.png" alt="App screenshot 1" width="260" />
+      <img src="docs/screenshots/Screenshot%20from%202026-05-03%2017-56-27.png" alt="Login flow screenshot 2" width="180" />
     </td>
     <td align="center">
-      <img src="docs/screenshots/Screenshot%20from%202026-05-03%2017-57-13.png" alt="App screenshot 2" width="260" />
+      <img src="docs/screenshots/Screenshot%20from%202026-05-03%2017-57-07.png" alt="App screenshot 1" width="180" />
+    </td>
+    <td align="center">
+      <img src="docs/screenshots/Screenshot%20from%202026-05-03%2017-57-13.png" alt="App screenshot 2" width="180" />
     </td>
   </tr>
 </table>
