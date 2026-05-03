@@ -77,22 +77,6 @@ class TestLogin:
         r = client.post("/auth/login", json={"email": "nobody@example.com", "password": "pass"})
         assert r.status_code == 401
 
-    def test_oauth_account_rejects_password_login(self, client, db):
-        user = User(
-            id="user-oauthonly",
-            username="oauthonly",
-            email="oauth@example.com",
-            password_hash=None,
-            display_name="OAuth Only",
-            oauth_provider="google",
-            oauth_sub="google-sub-123",
-        )
-        db.add(user)
-        db.commit()
-        r = client.post("/auth/login", json={"email": "oauth@example.com", "password": "anything"})
-        assert r.status_code == 400
-        assert "Google" in r.json()["detail"]
-
 
 class TestRefreshAndLogout:
     def test_refresh_rotates_tokens(self, client, db):

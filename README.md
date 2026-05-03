@@ -66,13 +66,13 @@ Production-quality authentication system extracted from a React Native social ap
 |---|---|---|
 | JWT + token logic | `backend/security/auth.py` | Issue/verify JWTs, hash/rotate refresh tokens |
 | Email rate limiting | `backend/security/auth_rate_limit.py` | Per-email brute-force protection |
-| Auth endpoints | `backend/api/auth_routes.py` | login, register, refresh, logout, OAuth, admin revoke |
+| Auth endpoints | `backend/api/auth_routes.py` | login, register, refresh, logout, admin revoke |
 | Request schemas | `backend/api/schemas.py` | Pydantic models for all auth endpoints |
 | HTTP client | `frontend/lib/api.ts` | Token management, refresh mutex, retry-on-401 |
 | Session context | `frontend/lib/session.tsx` | React context, session lifecycle |
 | Token storage | `frontend/lib/sessionStore.ts` | SecureStore (keychain) + AsyncStorage split |
 | Session events | `frontend/lib/sessionInvalidation.ts` | Pub/sub event bus for forced logout |
-| Login UI | `frontend/app/login.tsx` | Email/password + Google + Apple |
+| Login UI | `frontend/app/login.tsx` | Email/password login and registration |
 | Route protection | `frontend/app/_layout.tsx` | AuthGate — redirects unauthenticated users |
 
 ---
@@ -114,15 +114,7 @@ Defense in depth: server-side lock prevents replay attacks from multiple devices
 
 Scaling note: per-email table works fine for single-server deployments, multi-container would need Redis.
 
-### 5. OAuth account linking (Google + Apple)
-
-Three-stage merge strategy when an OAuth login arrives:
-
-1. **Exact match on `(provider, sub)`** — returning OAuth user, fast path
-2. **Email match** — user created a password account then signed in with OAuth; we link the provider instead of creating a duplicate account
-3. **Create new user** — genuinely new, assign to the default community
-
-### 6. Token storage on mobile
+### 5. Token storage on mobile
 
 | Token | Storage | Reason |
 |---|---|---|
@@ -132,11 +124,11 @@ Three-stage merge strategy when an OAuth login arrives:
 
 On app restart user metadata loads from AsyncStorage immediately (fast UI), then the access token is obtained by calling `/auth/refresh` in the background. The access token is never persisted to disk.
 
-### 7. Fail-fast environment validation
+### 6. Fail-fast environment validation
 
 The system refuses to start if misconfigured meaning no silent insecure defaults in production.
 
-### 8. Viewer permissions — data withheld server-side
+### 7. Viewer permissions — data withheld server-side
 
 Privacy settings (`hide_community_from_non_friends`) are enforced in the serializer, not the UI. Sensitive fields are nulled out server side. The client is told the viewer's relationship (`self`, `friend`, `follower`, `stranger`) so it can render correctly but never receives data it isn't entitled to.
 

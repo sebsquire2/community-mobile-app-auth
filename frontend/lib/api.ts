@@ -64,8 +64,6 @@ function shouldUseAuth(path: string) {
     !path.startsWith('/auth/login') &&
     !path.startsWith('/auth/register') &&
     !path.startsWith('/auth/refresh') &&
-    !path.startsWith('/auth/google') &&
-    !path.startsWith('/auth/apple') &&
     !path.startsWith('/health')
   );
 }
@@ -170,24 +168,6 @@ export async function login(email: string, password: string): Promise<AuthRespon
   const response = await fetchJson<AuthResponse>('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
-  });
-  accessToken = response.access_token;
-  return response;
-}
-
-export async function loginWithGoogle(idToken: string): Promise<AuthResponse> {
-  const response = await fetchJson<AuthResponse>('/auth/google', {
-    method: 'POST',
-    body: JSON.stringify({ id_token: idToken }),
-  });
-  accessToken = response.access_token;
-  return response;
-}
-
-export async function loginWithApple(idToken: string, displayName?: string): Promise<AuthResponse> {
-  const response = await fetchJson<AuthResponse>('/auth/apple', {
-    method: 'POST',
-    body: JSON.stringify({ id_token: idToken, display_name: displayName ?? null }),
   });
   accessToken = response.access_token;
   return response;

@@ -4,8 +4,6 @@ import {
   SessionExpiredError,
   fetchMe,
   login as apiLogin,
-  loginWithApple as apiLoginWithApple,
-  loginWithGoogle as apiLoginWithGoogle,
   logoutSession as apiLogoutSession,
   register as apiRegister,
 } from './api';
@@ -16,8 +14,6 @@ type SessionState = {
   user: ApiUser | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  loginWithGoogle: (idToken: string) => Promise<void>;
-  loginWithApple: (idToken: string, displayName?: string) => Promise<void>;
   register: (displayName: string, email: string, password: string, communityId: string) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (nextUser: ApiUser) => Promise<void>;
@@ -55,22 +51,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(
     async (email: string, password: string) => {
       const { user: nextUser, access_token, refresh_token, token_type } = await apiLogin(email, password);
-      await persistSession(nextUser, { accessToken: access_token, refreshToken: refresh_token, tokenType: token_type });
-    },
-    [persistSession]
-  );
-
-  const loginWithGoogle = useCallback(
-    async (idToken: string) => {
-      const { user: nextUser, access_token, refresh_token, token_type } = await apiLoginWithGoogle(idToken);
-      await persistSession(nextUser, { accessToken: access_token, refreshToken: refresh_token, tokenType: token_type });
-    },
-    [persistSession]
-  );
-
-  const loginWithApple = useCallback(
-    async (idToken: string, displayName?: string) => {
-      const { user: nextUser, access_token, refresh_token, token_type } = await apiLoginWithApple(idToken, displayName);
       await persistSession(nextUser, { accessToken: access_token, refreshToken: refresh_token, tokenType: token_type });
     },
     [persistSession]
@@ -143,8 +123,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [clearSession]);
 
   const value = useMemo(
-    () => ({ user, isLoading, login, loginWithGoogle, loginWithApple, register, logout, updateUser }),
-    [user, isLoading, login, loginWithGoogle, loginWithApple, register, logout, updateUser]
+    () => ({ user, isLoading, login, register, logout, updateUser }),
+    [user, isLoading, login, register, logout, updateUser]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

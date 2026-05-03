@@ -60,8 +60,6 @@ class User(Base):
     allow_followers = Column(Boolean, nullable=False, default=True)
     default_post_visibility = Column(String, nullable=False, default="public")
     hide_community_from_non_friends = Column(Boolean, nullable=False, default=False)
-    oauth_provider = Column(String, nullable=True)
-    oauth_sub = Column(String, nullable=True)
     onboarding_complete = Column(Boolean, nullable=False, default=True)
 
     community = relationship("Community", back_populates="users")

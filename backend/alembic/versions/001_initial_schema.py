@@ -37,8 +37,6 @@ def upgrade() -> None:
         sa.Column("allow_followers", sa.Boolean(), nullable=False, server_default="true"),
         sa.Column("default_post_visibility", sa.String(), nullable=False, server_default="public"),
         sa.Column("hide_community_from_non_friends", sa.Boolean(), nullable=False, server_default="false"),
-        sa.Column("oauth_provider", sa.String(), nullable=True),
-        sa.Column("oauth_sub", sa.String(), nullable=True),
         sa.Column("onboarding_complete", sa.Boolean(), nullable=False, server_default="true"),
         sa.ForeignKeyConstraint(["community_id"], ["communities.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),

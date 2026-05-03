@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-import os
-import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 from uuid import uuid4
 
-import jwt
 from email_validator import EmailNotValidError, validate_email
 from fastapi import APIRouter, Depends, HTTPException, Request
-from jwt import PyJWKClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -35,8 +31,6 @@ from backend.core.rate_limit import limiter
 from backend.api.schemas import (
     ApiCommunity,
     ApiUser,
-    AppleOAuthRequest,
-    GoogleOAuthRequest,
     LoginRequest,
     LogoutRequest,
     PostCreate,
@@ -45,58 +39,6 @@ from backend.api.schemas import (
     RevokeSessionsRequest,
     UpdateMeRequest,
 )
-
-GOOGLE_JWKS_URI = "https://www.googleapis.com/oauth2/v3/certs"
-APPLE_JWKS_URI = "https://appleid.apple.com/auth/keys"
-
-_google_jwks_client: Optional[PyJWKClient] = None
-_apple_jwks_client: Optional[PyJWKClient] = None
-
-
-def _get_google_jwks_client() -> PyJWKClient:
-    global _google_jwks_client
-    if _google_jwks_client is None:
-        _google_jwks_client = PyJWKClient(GOOGLE_JWKS_URI, cache_keys=True)
-    return _google_jwks_client
-
-
-def _get_apple_jwks_client() -> PyJWKClient:
-    global _apple_jwks_client
-    if _apple_jwks_client is None:
-        _apple_jwks_client = PyJWKClient(APPLE_JWKS_URI, cache_keys=True)
-    return _apple_jwks_client
-
-
-def _verify_google_id_token(id_token: str) -> dict:
-    client_id = os.getenv("GOOGLE_CLIENT_ID")
-    if not client_id:
-        raise HTTPException(status_code=503, detail="Google OAuth not configured")
-    try:
-        signing_key = _get_google_jwks_client().get_signing_key_from_jwt(id_token)
-        return jwt.decode(id_token, signing_key.key, algorithms=["RS256"], audience=client_id)
-    except Exception as exc:
-        raise HTTPException(status_code=401, detail="Invalid Google ID token") from exc
-
-
-def _verify_apple_id_token(id_token: str) -> dict:
-    client_id = os.getenv("APPLE_CLIENT_ID")
-    if not client_id:
-        raise HTTPException(status_code=503, detail="Apple OAuth not configured")
-    try:
-        signing_key = _get_apple_jwks_client().get_signing_key_from_jwt(id_token)
-        return jwt.decode(id_token, signing_key.key, algorithms=["RS256"], audience=client_id)
-    except Exception as exc:
-        raise HTTPException(status_code=401, detail="Invalid Apple ID token") from exc
-
-
-def _username_from(base: str, db: Session) -> str:
-    slug = re.sub(r"[^a-z0-9]", "", base.lower())[:20] or "user"
-    candidate = slug
-    counter = 1
-    while db.execute(select(User).where(User.username == candidate)).scalar_one_or_none():
-        candidate = f"{slug}{counter}"
-        counter += 1
-    return candidate
 
 
 def _viewer_relationship(
@@ -148,50 +90,6 @@ def _serialize_user(user: User, viewer: Optional[User], db: Session) -> dict:
     ).model_dump(by_alias=True)
 
 
-def _find_or_create_oauth_user(
-    db: Session,
-    *,
-    provider: str,
-    sub: str,
-    email: Optional[str],
-    display_name: Optional[str],
-) -> User:
-    # 1. Exact match on provider + sub (returning OAuth user)
-    user = db.execute(
-        select(User).where(User.oauth_provider == provider, User.oauth_sub == sub)
-    ).scalar_one_or_none()
-    if user:
-        return user
-
-    # 2. Email match — link OAuth provider to existing password account
-    if email:
-        user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
-        if user:
-            user.oauth_provider = provider
-            user.oauth_sub = sub
-            db.commit()
-            return user
-
-    # 3. Create new user, optionally assigning them to the first available community
-    default_community = db.execute(select(Community).limit(1)).scalar_one_or_none()
-    name = (display_name or "").strip() or (email.split("@")[0] if email else provider)
-    username = _username_from(name, db)
-    user = User(
-        id=f"user-{uuid4().hex[:10]}",
-        username=username,
-        email=email,
-        password_hash=None,
-        display_name=name,
-        community_id=default_community.id if default_community else None,
-        oauth_provider=provider,
-        oauth_sub=sub,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
-
-
 router = APIRouter()
 
 
@@ -206,11 +104,6 @@ def login(
         raise HTTPException(status_code=400, detail="Email and password required")
     check_email_rate_limit(db, email)
     user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
-    if user and not user.password_hash and user.oauth_provider:
-        raise HTTPException(
-            status_code=400,
-            detail=f"This account uses {user.oauth_provider.capitalize()} sign-in. Please use that instead.",
-        )
     if not user or not verify_password(password, user.password_hash or ""):
         record_failed_login(db, email)
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -316,48 +209,6 @@ def register(
     db.add(user)
     db.commit()
     db.refresh(user)
-    tokens = issue_tokens_for_user(db, user)
-    return {
-        "access_token": tokens.access_token,
-        "refresh_token": tokens.refresh_token,
-        "token_type": tokens.token_type,
-        "user": _serialize_user(user, user, db),
-    }
-
-
-@router.post("/auth/google", status_code=200)
-@limiter.limit("10/minute")
-def oauth_google(
-    request: Request, payload: GoogleOAuthRequest, db: Session = Depends(get_db)
-) -> Dict[str, Any]:
-    claims = _verify_google_id_token(payload.id_token)
-    sub = claims.get("sub") or ""
-    email = (claims.get("email") or "").strip().lower() or None
-    display_name = claims.get("name") or None
-    if not sub:
-        raise HTTPException(status_code=401, detail="Invalid Google ID token")
-    user = _find_or_create_oauth_user(db, provider="google", sub=sub, email=email, display_name=display_name)
-    tokens = issue_tokens_for_user(db, user)
-    return {
-        "access_token": tokens.access_token,
-        "refresh_token": tokens.refresh_token,
-        "token_type": tokens.token_type,
-        "user": _serialize_user(user, user, db),
-    }
-
-
-@router.post("/auth/apple", status_code=200)
-@limiter.limit("10/minute")
-def oauth_apple(
-    request: Request, payload: AppleOAuthRequest, db: Session = Depends(get_db)
-) -> Dict[str, Any]:
-    claims = _verify_apple_id_token(payload.id_token)
-    sub = claims.get("sub") or ""
-    email = (claims.get("email") or "").strip().lower() or None
-    display_name = (payload.display_name or "").strip() or None
-    if not sub:
-        raise HTTPException(status_code=401, detail="Invalid Apple ID token")
-    user = _find_or_create_oauth_user(db, provider="apple", sub=sub, email=email, display_name=display_name)
     tokens = issue_tokens_for_user(db, user)
     return {
         "access_token": tokens.access_token,

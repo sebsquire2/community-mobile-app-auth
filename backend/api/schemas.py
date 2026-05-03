@@ -51,15 +51,6 @@ class RegisterRequest(BaseModel):
     communityId: Optional[str] = None
 
 
-class GoogleOAuthRequest(BaseModel):
-    id_token: str
-
-
-class AppleOAuthRequest(BaseModel):
-    id_token: str
-    display_name: Optional[str] = None
-
-
 class ApiCommunity(ApiModel):
     id: str
     name: str

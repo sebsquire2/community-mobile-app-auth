@@ -1,7 +1,7 @@
 [project]
 name = "community-mobile-app-auth"
 version = "1.0.0"
-description = "Production-ready auth system: hybrid JWT + rotating refresh tokens, Argon2id, OAuth, rate limiting"
+description = "Production-ready auth system: hybrid JWT + rotating refresh tokens, Argon2id, rate limiting"
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.13.2",
