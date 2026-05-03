@@ -1,5 +1,7 @@
 # community-mobile-app-auth
 
+**Repository mostly used for research**
+
 ## Problem
 
 Implementing authentication and tiered authorisation to content (where the same content is visible or hidden depending on a user's group membership) without sacrificing session smoothness or introducing security shortcuts.
