@@ -138,7 +138,5 @@ Privacy settings (`hide_community_from_non_friends`) are enforced in the seriali
 
 ## Known limitations / pre-production TODOs
 
-These are documented intentionally — they represent recognised trade-offs, not oversights:
-
 1. **No email verification on registration**: `validate_email()` checks format only, we should check deliverability.
 2. **No input length limits**: no max length on display name, email, etc.
