@@ -29,7 +29,7 @@ from backend.security.auth_rate_limit import (
     record_failed_login,
 )
 from backend.core.dependencies import get_db, require_admin_key
-from backend.models import Community, Follow, Friendship, RefreshToken, User
+from backend.models import Community, Follow, Friendship, Post, RefreshToken, User
 from backend.core.rate_limit import limiter
 
 from backend.api.schemas import (
@@ -39,6 +39,7 @@ from backend.api.schemas import (
     GoogleOAuthRequest,
     LoginRequest,
     LogoutRequest,
+    PostCreate,
     RefreshRequest,
     RegisterRequest,
     RevokeSessionsRequest,
@@ -387,19 +388,21 @@ def update_me(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
+    user = db.get(User, current_user.id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
     if payload.community_id is not None:
         if not db.get(Community, payload.community_id):
             raise HTTPException(status_code=404, detail="Community not found")
-        current_user.community_id = payload.community_id
+        user.community_id = payload.community_id
     if payload.display_name is not None:
         if not payload.display_name.strip():
             raise HTTPException(status_code=400, detail="Display name cannot be empty")
-        current_user.display_name = payload.display_name.strip()
+        user.display_name = payload.display_name.strip()
     if payload.hide_community_from_non_friends is not None:
-        current_user.hide_community_from_non_friends = payload.hide_community_from_non_friends
+        user.hide_community_from_non_friends = payload.hide_community_from_non_friends
     db.commit()
-    db.refresh(current_user)
-    return _serialize_user(current_user, current_user, db)
+    return _serialize_user(user, user, db)
 
 
 @router.get("/communities")
@@ -440,3 +443,70 @@ def get_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return _serialize_user(user, viewer, db)
+
+
+def _serialize_post(post: Post, viewer: Optional[User], db: Session) -> Dict[str, Any]:
+    community = db.get(Community, post.community_id) if post.community_id else None
+    return {
+        "id": post.id,
+        "body": post.body,
+        "visibility": post.visibility,
+        "createdAt": post.created_at.isoformat(),
+        "communityId": post.community_id,
+        "communityName": community.name if community else None,
+        "author": _serialize_user(post.author, viewer, db),
+    }
+
+
+@router.post("/posts", status_code=201)
+def create_post(
+    payload: PostCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    if not payload.body.strip():
+        raise HTTPException(status_code=400, detail="Post body cannot be empty")
+    user = db.get(User, current_user.id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    post = Post(
+        id=f"post-{uuid4().hex[:10]}",
+        user_id=user.id,
+        community_id=user.community_id,
+        body=payload.body.strip(),
+        visibility=payload.visibility,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(post)
+    db.commit()
+    return _serialize_post(post, user, db)
+
+
+@router.get("/feed/city")
+def city_feed(
+    viewer: Optional[User] = Depends(_get_optional_user),
+    db: Session = Depends(get_db),
+) -> List[Dict[str, Any]]:
+    posts = db.execute(
+        select(Post)
+        .where(Post.visibility == "public")
+        .order_by(Post.created_at.desc())
+        .limit(50)
+    ).scalars().all()
+    return [_serialize_post(p, viewer, db) for p in posts]
+
+
+@router.get("/communities/{community_id}/feed")
+def community_feed(
+    community_id: str,
+    viewer: Optional[User] = Depends(_get_optional_user),
+    db: Session = Depends(get_db),
+) -> List[Dict[str, Any]]:
+    if not db.get(Community, community_id):
+        raise HTTPException(status_code=404, detail="Community not found")
+    is_member = viewer is not None and viewer.community_id == community_id
+    query = select(Post).where(Post.community_id == community_id)
+    if not is_member:
+        query = query.where(Post.visibility == "public")
+    posts = db.execute(query.order_by(Post.created_at.desc()).limit(50)).scalars().all()
+    return [_serialize_post(p, viewer, db) for p in posts]

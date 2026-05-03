@@ -4,6 +4,16 @@ export type ApiCommunity = {
   memberCount: number;
 };
 
+export type ApiPost = {
+  id: string;
+  body: string;
+  visibility: 'public' | 'community';
+  createdAt: string;
+  communityId: string | null;
+  communityName: string | null;
+  author: ApiUser;
+};
+
 export type ApiUser = {
   id: string;
   username: string;

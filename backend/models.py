@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from .core.db import Base
@@ -65,10 +65,25 @@ class User(Base):
 
     community = relationship("Community", back_populates="users")
     refresh_tokens = relationship("RefreshToken", back_populates="user")
+    posts = relationship("Post", back_populates="author", cascade="all, delete-orphan")
     friendships = relationship("Friendship", foreign_keys="Friendship.user_id", back_populates="user")
     friended_by = relationship("Friendship", foreign_keys="Friendship.friend_id", back_populates="friend")
     following = relationship("Follow", foreign_keys="Follow.follower_id", back_populates="follower")
     follower_links = relationship("Follow", foreign_keys="Follow.target_id", back_populates="target")
+
+
+class Post(Base):
+    __tablename__ = "posts"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    community_id = Column(String, ForeignKey("communities.id", ondelete="SET NULL"), nullable=True, index=True)
+    body = Column(Text, nullable=False)
+    visibility = Column(String, nullable=False, default="public")  # 'public' | 'community'
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    author = relationship("User", back_populates="posts")
+    community = relationship("Community")
 
 
 class RefreshToken(Base):

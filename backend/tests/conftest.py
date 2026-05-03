@@ -43,6 +43,7 @@ def clean_db():
     with engine.connect() as conn:
         conn.execute(text("DELETE FROM auth_failed_login_attempts"))
         conn.execute(text("DELETE FROM refresh_tokens"))
+        conn.execute(text("DELETE FROM posts"))
         conn.execute(text("DELETE FROM follows"))
         conn.execute(text("DELETE FROM friendships"))
         conn.execute(text("DELETE FROM users"))

@@ -70,3 +70,8 @@ class UpdateMeRequest(ApiModel):
     community_id: Optional[str] = None
     display_name: Optional[str] = None
     hide_community_from_non_friends: Optional[bool] = None
+
+
+class PostCreate(ApiModel):
+    body: str
+    visibility: Literal['public', 'community'] = 'public'

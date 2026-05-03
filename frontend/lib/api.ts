@@ -1,4 +1,4 @@
-import { ApiCommunity, ApiUser } from './types';
+import { ApiCommunity, ApiPost, ApiUser } from './types';
 import { invalidateSession } from './sessionInvalidation';
 import {
   loadPersistedSession,
@@ -222,6 +222,21 @@ export async function fetchCommunityMembers(communityId: string): Promise<ApiUse
 export async function updateMe(payload: { communityId?: string; displayName?: string }): Promise<ApiUser> {
   return fetchJson<ApiUser>('/users/me', {
     method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchCityFeed(): Promise<ApiPost[]> {
+  return fetchJson<ApiPost[]>('/feed/city');
+}
+
+export async function fetchCommunityFeed(communityId: string): Promise<ApiPost[]> {
+  return fetchJson<ApiPost[]>(`/communities/${encodeURIComponent(communityId)}/feed`);
+}
+
+export async function createPost(payload: { body: string; visibility: 'public' | 'community' }): Promise<ApiPost> {
+  return fetchJson<ApiPost>('/posts', {
+    method: 'POST',
     body: JSON.stringify(payload),
   });
 }
