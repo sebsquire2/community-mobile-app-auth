@@ -115,9 +115,7 @@ On app restart user metadata loads from AsyncStorage immediately (fast UI), then
 
 ### 7. Fail-fast environment validation
 
-The system refuses to start if misconfigured:
-
-No silent insecure defaults in production. A missing secret causes startup failure, not a degraded state.
+The system refuses to start if misconfigured meaning no silent insecure defaults in production.
 
 ### 8. Viewer permissions — data withheld server-side
 
@@ -130,6 +128,5 @@ Privacy settings (`hide_community_from_non_friends`) are enforced in the seriali
 These are documented intentionally — they represent recognised trade-offs, not oversights:
 
 1. **15-minute window after logout** — the access token remains valid until expiry after `/auth/logout`. The refresh token is revoked immediately; a stolen access token has at most 15 minutes of validity.
-2. **Per-email rate limiting is in-memory via DB rows** — works for single-server deployments; needs Redis for horizontal scaling.
-3. **No email verification on registration** — `validate_email()` checks format only; it does not confirm deliverability. Add email confirmation before production.
-4. **No input length limits** — no max length on display name, email, etc. Add these before production.
+2**No email verification on registration**: `validate_email()` checks format only, we should check deliverability.
+3**No input length limits**: no max length on display name, email, etc. 
