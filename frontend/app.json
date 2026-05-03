@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Community Auth",
+    "slug": "community-auth",
+    "version": "1.0.0",
+    "scheme": "community-auth",
+    "platforms": ["ios", "android", "web"],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ]
+  }
+}

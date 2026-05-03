@@ -1,0 +1,24 @@
+[project]
+name = "community-mobile-app-auth"
+version = "1.0.0"
+description = "Production-ready auth system: hybrid JWT + rotating refresh tokens, Argon2id, OAuth, rate limiting"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.13.2",
+    "argon2-cffi>=23.1.0",
+    "fastapi>=0.115.8",
+    "pydantic>=2.12.4",
+    "psycopg[binary]>=3.2.3",
+    "python-dotenv>=1.2.1",
+    "sqlalchemy>=2.0.36",
+    "uvicorn[standard]>=0.34.0",
+    "python-multipart>=0.0.22",
+    "pytest>=8.0.0",
+    "httpx>=0.27.0",
+    "slowapi>=0.1.9",
+    "email-validator>=2.3.0",
+    "pyjwt[cryptography]>=2.11.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
