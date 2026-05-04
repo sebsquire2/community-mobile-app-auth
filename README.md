@@ -97,7 +97,7 @@ Argon2id is memory-hard. An attacker who leaks the DB and tries to brute-force o
 
 ### 3. The concurrent refresh problem — and why a mutex fixes it
 
-**Problem:** When an access token expires, 4 parallel in-flight requests all get 401 simultaneously. A naive fix: each request independently calls `/auth/refresh` would break immediately: the first call rotates the refresh token, so calls 2-4 present a revoked token and get 401 again. The client looks "logged out" for no reason.
+**Problem:** When an access token expires, multiple (n) parallel in-flight requests may all get 401 simultaneously. A naive fix: each request independently calls `/auth/refresh` would break immediately: the first call rotates the refresh token, so subsequent calls present a revoked token and get 401 again. The client looks "logged out" for no reason.
 
 **Solution has two parts:**
 
